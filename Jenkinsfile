@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOCKERHUB_USER = 'ikomajic'
         IMAGE_NAME = 'project2-demo'
-        IMAGE_TAG = "build-%BUILD_NUMBER%"
         KUBECONFIG = 'C:\\Users\\ivanm\\.kube\\config'
     }
 
@@ -18,7 +17,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %DOCKERHUB_USER%/%IMAGE_NAME%:%IMAGE_TAG% ."
+                bat "docker build -t %DOCKERHUB_USER%/%IMAGE_NAME%:build-%BUILD_NUMBER% ."
             }
         }
 
@@ -36,7 +35,7 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                bat "docker push %DOCKERHUB_USER%/%IMAGE_NAME%:%IMAGE_TAG%"
+                bat "docker push %DOCKERHUB_USER%/%IMAGE_NAME%:build-%BUILD_NUMBER%"
             }
         }
 
@@ -48,7 +47,7 @@ pipeline {
                 bat """
                 helm upgrade --install project2 helm ^
                   --set image.repository=%DOCKERHUB_USER%/%IMAGE_NAME% ^
-                  --set image.tag=%IMAGE_TAG%
+                  --set image.tag=build-%BUILD_NUMBER%
                 """
             }
         }
