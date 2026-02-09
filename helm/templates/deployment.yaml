@@ -5,10 +5,10 @@ metadata:
   labels:
     {{- include "helm.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+{{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
-    strategy:
+{{- end }}
+  strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
