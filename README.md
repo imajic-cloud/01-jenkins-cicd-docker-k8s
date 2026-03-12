@@ -1,698 +1,353 @@
-# Jenkins CI/CD Pipeline with Docker, Helm, and Kubernetes
+# Jenkins CI/CD Pipeline: Docker → Helm → Kubernetes Deployment
 
-A production-ready CI/CD pipeline implementation using Jenkins, Docker, Helm, and Kubernetes. This project demonstrates automated build, test, and deployment workflows using industry-standard DevOps tools and practices.
+![Jenkins](https://img.shields.io/badge/CI-Jenkins-red)
+![Docker](https://img.shields.io/badge/container-Docker-blue)
+![Kubernetes](https://img.shields.io/badge/orchestrator-Kubernetes-blue)
+![Helm](https://img.shields.io/badge/package-Helm-purple)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## Overview
+A hands-on **DevOps portfolio project** demonstrating a complete CI/CD pipeline using **Jenkins, Docker, Helm, and Kubernetes**, running locally on a Windows machine with **WSL2**.
 
-This project showcases a complete CI/CD pipeline where Jenkins orchestrates the entire application lifecycle - from source code commit to production deployment on Kubernetes. The pipeline runs on a Linux agent, builds containerized applications, and deploys them using Helm charts.
+---
 
-## Architecture
+# Architecture
+
+### Pipeline Flow
 
 ```
-GitHub → Jenkins (Linux Agent) → Docker Build → Docker Hub → Helm Deploy → Kubernetes Cluster
+Developer Push
+      │
+      ▼
+GitHub Repository
+      │
+      ▼
+Jenkins Controller (Windows)
+      │
+      │ SSH
+      ▼
+Linux Agent (WSL2 Ubuntu)
+      │
+      ▼
+Docker Build
+      │
+      ▼
+Docker Hub
+      │
+      ▼
+Helm Deployment
+      │
+      ▼
+Kubernetes Cluster (Docker Desktop)
+      │
+      ▼
+Running Pods
 ```
 
-**Pipeline Flow:**
-1. Developer pushes code to GitHub repository
-2. Jenkins detects changes via webhook or polling
-3. Pipeline executes on Linux agent (WSL)
-4. Docker image is built from source code
-5. Image is tagged and pushed to Docker Hub
-6. Helm chart deploys the application to Kubernetes
-7. Application runs on Kubernetes cluster (Docker Desktop)
+---
 
-## Technologies Stack
+# Tech Stack
 
-| Category | Technology |
-|----------|-----------|
-| **CI/CD Platform** | Jenkins |
-| **Jenkins Architecture** | Windows Controller + Linux Agent (WSL) |
-| **Container Runtime** | Docker |
-| **Container Registry** | Docker Hub |
-| **Orchestration** | Kubernetes (Docker Desktop) |
-| **Package Manager** | Helm 3 |
-| **Version Control** | GitHub |
-| **Operating System** | Linux (WSL for agent) |
+| Category             | Technology                              |
+| -------------------- | --------------------------------------- |
+| CI/CD Platform       | Jenkins                                 |
+| Jenkins Architecture | Windows Controller + Linux Agent (WSL2) |
+| Containerization     | Docker (nginx:alpine)                   |
+| Container Registry   | Docker Hub                              |
+| Kubernetes           | Docker Desktop (local, Kubeadm)         |
+| Package Manager      | Helm 3                                  |
+| Version Control      | GitHub                                  |
+| OS (Agent)           | Ubuntu 24.04 (WSL2)                     |
 
-## Project Structure
+---
+
+# Project Structure
 
 ```
 01-jenkins-cicd-docker-k8s/
-│
-├── Jenkinsfile                 # Pipeline definition
-├── Dockerfile                  # Container image specification
-├── app/                        # Application source code
-│   ├── src/
-│   └── package.json
-│
-├── helm/                       # Helm chart
-│   ├── Chart.yaml
-│   ├── values.yaml
+├── Jenkinsfile              # 5-stage pipeline definition
+├── Dockerfile               # nginx:alpine container image
+├── helm/                    # Helm chart
+│   ├── Chart.yaml           # Chart metadata (v0.1.0)
+│   ├── values.yaml          # Default values and feature flags
+│   ├── charts/              # Chart dependencies
 │   └── templates/
-│       ├── deployment.yaml
-│       ├── service.yaml
-│       └── ingress.yaml
-│
-├── k8s/                        # Kubernetes manifests (alternative)
-│   ├── deployment.yaml
-│   └── service.yaml
-│
+│       ├── _helpers.tpl         # Template helper functions
+│       ├── NOTES.txt            # Post-install notes
+│       ├── deployment.yaml      # RollingUpdate, liveness/readiness probes
+│       ├── service.yaml         # NodePort service on port 80
+│       ├── serviceaccount.yaml  # Pod identity
+│       ├── ingress.yaml         # External routing (disabled by default)
+│       ├── hpa.yaml             # Horizontal Pod Autoscaler (disabled by default)
+│       ├── httproute.yaml       # Gateway API route (disabled by default)
+│       └── tests/               # Helm test hooks
 └── README.md
 ```
 
-## Prerequisites
+---
 
-Before running this project, ensure you have:
+# CI/CD Pipeline
 
-- **Jenkins** (v2.400+) - Installed and running
-- **Docker** (v20.x or higher) - For building images
-- **Docker Desktop** - With Kubernetes enabled
-- **Helm** (v3.x) - For Kubernetes deployments
-- **WSL2** (Windows Subsystem for Linux) - For Linux agent
-- **kubectl** - Configured to connect to your cluster
-- **GitHub Account** - For source code repository
-- **Docker Hub Account** - For image registry
-
-## Setup Instructions
-
-### 1. Jenkins Configuration
-
-#### Install Jenkins
-
-**On Windows:**
-```powershell
-# Download Jenkins installer from jenkins.io
-# Or use Chocolatey:
-choco install jenkins
-```
-
-**Access Jenkins:**
-- Navigate to `http://localhost:8080`
-- Complete initial setup wizard
-- Install suggested plugins
-
-#### Configure Linux Agent (WSL)
-
-1. **Install WSL2 on Windows:**
-```powershell
-wsl --install
-wsl --set-default-version 2
-```
-
-2. **Install Ubuntu in WSL:**
-```bash
-wsl --install -d Ubuntu-22.04
-```
-
-3. **Install Java on WSL (required for Jenkins agent):**
-```bash
-sudo apt update
-sudo apt install openjdk-11-jdk -y
-java -version
-```
-
-4. **Install Docker in WSL:**
-```bash
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Add user to docker group
-sudo usermod -aG docker $USER
-
-# Start Docker service
-sudo service docker start
-```
-
-5. **Configure Jenkins Agent:**
-   - In Jenkins: Manage Jenkins → Nodes → New Node
-   - Node name: `linux-agent`
-   - Type: Permanent Agent
-   - Remote root directory: `/home/<username>/jenkins`
-   - Labels: `linux`
-   - Launch method: Launch agent via SSH
-   - Host: `localhost` (or WSL IP)
-   - Credentials: Add SSH credentials for WSL user
-
-### 2. Docker Hub Credentials
-
-Add Docker Hub credentials to Jenkins:
-
-1. Go to: Manage Jenkins → Credentials → Global
-2. Click "Add Credentials"
-3. Kind: Username with password
-4. ID: `dockerhub-credentials`
-5. Username: Your Docker Hub username
-6. Password: Your Docker Hub password or access token
-
-### 3. GitHub Credentials
-
-Add GitHub credentials to Jenkins:
-
-1. Go to: Manage Jenkins → Credentials → Global
-2. Click "Add Credentials"
-3. Kind: Username with password (or SSH key)
-4. ID: `github-credentials`
-5. Username: Your GitHub username
-6. Password: GitHub Personal Access Token
-
-### 4. Kubernetes Configuration
-
-Copy kubeconfig to Jenkins agent:
-
-```bash
-# On WSL (Linux agent)
-mkdir -p ~/.kube
-
-# Copy kubeconfig from Windows to WSL
-cp /mnt/c/Users/<YourUsername>/.kube/config ~/.kube/config
-
-# Verify connection
-kubectl get nodes
-```
-
-### 5. Install Required Jenkins Plugins
-
-Install these plugins from Manage Jenkins → Plugins:
-
-- **Docker Pipeline** - Docker build and push
-- **Kubernetes CLI** - kubectl commands
-- **Git** - GitHub integration
-- **Pipeline** - Pipeline support
-- **Credentials Binding** - Secure credential handling
-- **Blue Ocean** (optional) - Modern UI
-
-## Jenkins Pipeline
-
-### Jenkinsfile
+The Jenkins pipeline runs **entirely on the Linux agent (WSL2)**.
 
 ```groovy
-pipeline {
-    agent {
-        label 'linux'  // Run on Linux agent
-    }
-    
-    environment {
-        DOCKER_IMAGE = "yourusername/myapp"
-        DOCKER_TAG = "${BUILD_NUMBER}"
-        DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
-        KUBECONFIG = "${HOME}/.kube/config"
-    }
-    
-    stages {
-        stage('Checkout') {
-            steps {
-                echo 'Checking out code from GitHub...'
-                git branch: 'main',
-                    credentialsId: 'github-credentials',
-                    url: 'https://github.com/yourusername/your-repo.git'
-            }
-        }
-        
-        stage('Build Docker Image') {
-            steps {
-                echo 'Building Docker image...'
-                sh """
-                    docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                    docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                """
-            }
-        }
-        
-        stage('Push to Docker Hub') {
-            steps {
-                echo 'Pushing image to Docker Hub...'
-                sh """
-                    echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin
-                    docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                    docker push ${DOCKER_IMAGE}:latest
-                """
-            }
-        }
-        
-        stage('Deploy to Kubernetes') {
-            steps {
-                echo 'Deploying to Kubernetes using Helm...'
-                sh """
-                    helm upgrade --install myapp ./helm \
-                        --set image.repository=${DOCKER_IMAGE} \
-                        --set image.tag=${DOCKER_TAG} \
-                        --namespace default
-                """
-            }
-        }
-        
-        stage('Verify Deployment') {
-            steps {
-                echo 'Verifying deployment...'
-                sh """
-                    kubectl rollout status deployment/myapp
-                    kubectl get pods -l app=myapp
-                    kubectl get svc myapp
-                """
-            }
-        }
-    }
-    
-    post {
-        success {
-            echo 'Pipeline completed successfully! ✅'
-        }
-        failure {
-            echo 'Pipeline failed! ❌'
-        }
-        always {
-            echo 'Cleaning up...'
-            sh 'docker logout'
-        }
-    }
-}
+agent { label 'linux' }
 ```
 
-### Pipeline Stages Explained
+Pipeline stages:
 
-1. **Checkout** - Clones the latest code from GitHub
-2. **Build Docker Image** - Creates container image with build number tag
-3. **Push to Docker Hub** - Uploads image to registry
-4. **Deploy to Kubernetes** - Uses Helm to deploy/upgrade application
-5. **Verify Deployment** - Confirms pods are running successfully
+| Stage                | Description                                    |
+| -------------------- | ---------------------------------------------- |
+| Checkout             | Clone repository from GitHub                   |
+| Build Docker Image   | Build image tagged with `build-${BUILD_NUMBER}`|
+| Login Docker Hub     | Authenticate using Jenkins credentials         |
+| Push Docker Image    | Push versioned image to Docker Hub             |
+| Deploy to Kubernetes | Helm upgrade/install deployment                |
 
-## Running the Pipeline
+---
 
-### Method 1: Manual Trigger
+# Docker Build
 
-1. Open Jenkins dashboard
-2. Click on your pipeline job
-3. Click "Build Now"
-4. Monitor the build in "Build History"
-5. View console output for details
+The Dockerfile builds a lightweight container using **nginx:alpine**.
 
-### Method 2: GitHub Webhook (Automatic)
+Images are tagged with the Jenkins build number:
 
-1. **In GitHub repository:**
-   - Go to Settings → Webhooks → Add webhook
-   - Payload URL: `http://your-jenkins-url:8080/github-webhook/`
-   - Content type: `application/json`
-   - Events: "Just the push event"
+```
+ikomajic/project2-demo:build-${BUILD_NUMBER}
+```
 
-2. **In Jenkins job:**
-   - Configure → Build Triggers
-   - Check "GitHub hook trigger for GITScm polling"
+---
 
-Now every push to GitHub will trigger the pipeline automatically!
+# Helm Deployment
 
-### Method 3: Polling (Alternative)
+Helm manages Kubernetes resources and handles upgrades.
 
-In Jenkins job configuration:
-- Build Triggers → Poll SCM
-- Schedule: `H/5 * * * *` (checks every 5 minutes)
-
-## Kubernetes Deployment
-
-### View Deployed Application
+Deploy command used by Jenkins:
 
 ```bash
-# Get all resources
-kubectl get all
-
-# Get pods
-kubectl get pods -l app=myapp
-
-# Get service
-kubectl get svc myapp
-
-# Get deployment details
-kubectl describe deployment myapp
-
-# View logs
-kubectl logs -f deployment/myapp
+helm upgrade --install project2 helm \
+  --set image.repository=ikomajic/project2-demo \
+  --set image.tag=build-${BUILD_NUMBER}
 ```
 
-### Access the Application
+Helm ensures **idempotent deployments** — first run installs, later runs upgrade.
 
-```bash
-# Get service URL (if LoadBalancer)
-kubectl get svc myapp
+---
 
-# Port forward for testing
-kubectl port-forward svc/myapp 8080:80
+# Kubernetes Resources
 
-# Access at: http://localhost:8080
-```
+The Helm chart creates the following resources:
 
-### Scale the Application
+| Resource       | Status          | Purpose                              |
+| -------------- | --------------- | ------------------------------------ |
+| Deployment     | ✅ Always on    | Runs containerized application       |
+| Service        | ✅ Always on    | Exposes application via NodePort     |
+| ServiceAccount | ✅ Always on    | Pod identity for Kubernetes RBAC     |
+| Ingress        | ⚙️ Optional     | External routing (enable in values)  |
+| HPA            | ⚙️ Optional     | Horizontal Pod Autoscaling           |
+| HTTPRoute      | ⚙️ Optional     | Gateway API routing                  |
 
-```bash
-# Scale to 3 replicas
-kubectl scale deployment myapp --replicas=3
-
-# Verify scaling
-kubectl get pods -l app=myapp
-```
-
-## Helm Chart Configuration
-
-### values.yaml
+To enable optional resources, update `values.yaml`:
 
 ```yaml
-replicaCount: 2
-
-image:
-  repository: yourusername/myapp
-  tag: latest
-  pullPolicy: IfNotPresent
-
-service:
-  type: LoadBalancer
-  port: 80
-  targetPort: 8080
-
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
+ingress:
+  enabled: true
 
 autoscaling:
   enabled: true
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
+
+httpRoute:
+  enabled: true
 ```
 
-### Helm Commands
+Deployment configuration includes:
+
+- RollingUpdate strategy (maxUnavailable: 0, maxSurge: 1)
+- Liveness probe on `/`
+- Readiness probe on `/`
+- Configurable replica count
+
+---
+
+# Setup Instructions
+
+## 1. Enable Kubernetes in Docker Desktop
+
+Docker Desktop → Settings → Kubernetes → Enable Kubernetes (Kubeadm) → Apply & Restart
+
+Verify cluster:
 
 ```bash
-# Install chart
-helm install myapp ./helm
-
-# Upgrade deployment
-helm upgrade myapp ./helm --set image.tag=v2.0
-
-# List releases
-helm list
-
-# Rollback to previous version
-helm rollback myapp
-
-# Uninstall
-helm uninstall myapp
+kubectl config use-context docker-desktop
+kubectl get nodes
+# NAME             STATUS   ROLES           VERSION
+# docker-desktop   Ready    control-plane   v1.34.1
 ```
 
-## Pipeline Features
+---
 
-✅ **Linux-Based Execution** - All commands run on Linux agent for consistency  
-✅ **Docker Image Automation** - Automated build, tag, and push  
-✅ **Kubernetes Deployment** - Helm-based deployments with version control  
-✅ **Credential Management** - Secure handling of Docker Hub and GitHub credentials  
-✅ **Automated Testing** - Can integrate unit tests, security scans  
-✅ **Deployment Verification** - Automatic health checks post-deployment  
-✅ **Rollback Capability** - Helm enables easy rollback to previous versions  
+## 2. Install Jenkins
 
-## Monitoring & Verification
+Run PowerShell as Administrator:
 
-### Jenkins Build Status
-
-- **Blue Ocean UI**: Modern pipeline visualization
-- **Console Output**: Detailed logs for each stage
-- **Build History**: Track success/failure trends
-
-### Kubernetes Health Checks
-
-```bash
-# Check pod health
-kubectl get pods --watch
-
-# View events
-kubectl get events --sort-by=.metadata.creationTimestamp
-
-# Check resource usage
-kubectl top pods
-kubectl top nodes
-
-# Describe pod for issues
-kubectl describe pod <pod-name>
+```powershell
+choco install jenkins -y
 ```
 
-## Troubleshooting
+Access Jenkins at `http://localhost:8080` and complete setup wizard.
 
-### Issue: Jenkins agent won't connect
+---
 
-**Solution:**
+## 3. Configure Linux Agent (WSL2)
+
+Install SSH server:
+
 ```bash
-# Check SSH connection from Jenkins to WSL
+sudo apt install openssh-server -y
+sudo service ssh start
+```
+
+Add node in Jenkins — **Manage Jenkins → Nodes → New Node**:
+
+| Field                     | Value                               |
+| ------------------------- | ----------------------------------- |
+| Node Name                 | linux-agent                         |
+| Labels                    | linux                               |
+| Remote Directory          | /home/username/jenkins              |
+| Launch Method             | Launch agent via SSH                |
+| Host                      | localhost                           |
+| Host Key Verification     | Non verifying Verification Strategy |
+
+---
+
+## 4. Configure Git in Jenkins
+
+**Manage Jenkins → Tools → Git**
+
+Set executable path to: `git`
+
+---
+
+## 5. Add Docker Hub Credentials
+
+**Manage Jenkins → Credentials → Global → Add Credentials**
+
+| Field    | Value                     |
+| -------- | ------------------------- |
+| Kind     | Username with password    |
+| ID       | dockerhub                 |
+| Username | Docker Hub username       |
+| Password | Docker Hub password/token |
+
+---
+
+## 6. Create Jenkins Pipeline Job
+
+**New Item → Pipeline → Pipeline Script from SCM**
+
+| Field       | Value                                                       |
+| ----------- | ----------------------------------------------------------- |
+| SCM         | Git                                                         |
+| Repository  | https://github.com/imajic-cloud/01-jenkins-cicd-docker-k8s |
+| Branch      | */main                                                      |
+| Script Path | Jenkinsfile                                                 |
+
+---
+
+# Running the Pipeline
+
+1. Open Jenkins dashboard
+2. Open pipeline job
+3. Click **Build Now**
+4. Watch all 5 stages go green ✅
+
+---
+
+# Verify Deployment
+
+```bash
+# Check pods are running
+kubectl get pods
+# project2-helm-xxxx   1/1   Running   0   1m
+
+# Check service
+kubectl get svc
+# project2-helm   NodePort   10.96.x.x   80:3XXXX/TCP
+
+# Access the app
+kubectl port-forward svc/project2-helm 8090:80
+```
+
+Open browser: `http://localhost:8090` → nginx welcome page ✅
+
+---
+
+# Key DevOps Concepts Demonstrated
+
+### Jenkins Controller vs Agent
+The Jenkins controller manages scheduling and UI, while the Linux agent (WSL2) executes build tasks. This isolates builds and prevents resource exhaustion on the Jenkins server.
+
+### Pipeline as Code
+The Jenkinsfile lives in the repository, enabling version-controlled CI/CD pipelines.
+
+### Containerized Deployment
+Applications are packaged into Docker images, ensuring consistent environments across machines.
+
+### Helm Idempotent Deployments
+`helm upgrade --install` supports both installation and upgrade in one command, making pipelines safe to re-run.
+
+### Secure Credentials
+Docker Hub credentials are stored in Jenkins and injected securely at runtime via `withCredentials`.
+
+### Zero-Downtime Deployment
+RollingUpdate strategy ensures pods are replaced gradually with no downtime.
+
+### Production-Ready Helm Chart
+Optional resources (Ingress, HPA, HTTPRoute) are included and can be enabled via feature flags in `values.yaml` — ready for production without modifying templates.
+
+---
+
+# Troubleshooting
+
+**Jenkins agent offline**
+```bash
+sudo service ssh status
 ssh username@localhost
+```
+Set Host Key Verification to "Non verifying Verification Strategy".
 
-# Verify Java is installed on agent
-java -version
+**Git clone fails (CreateProcess error)**
 
-# Check Jenkins agent logs
-tail -f /home/username/jenkins/logs/agent.log
+Set Git path in Jenkins Tools to just `git`.
+
+**Application not reachable**
+```bash
+kubectl port-forward svc/project2-helm 8090:80
 ```
 
-### Issue: Docker build fails
-
-**Solution:**
+**Docker build fails**
 ```bash
-# Verify Docker is running on agent
 docker ps
-
-# Check Dockerfile syntax
-docker build -t test .
-
-# View build logs
-docker build --no-cache -t test . 2>&1 | tee build.log
-```
-
-### Issue: Cannot push to Docker Hub
-
-**Solution:**
-```bash
-# Verify credentials
-docker login
-
-# Check image exists
-docker images | grep myapp
-
-# Manual push test
-docker push yourusername/myapp:latest
-```
-
-### Issue: Helm deployment fails
-
-**Solution:**
-```bash
-# Verify Helm is installed
-helm version
-
-# Check kubeconfig
-kubectl config view
-
-# Test Helm chart
-helm install --dry-run --debug myapp ./helm
-
-# View Helm release status
-helm status myapp
-```
-
-### Issue: Pods not starting
-
-**Solution:**
-```bash
-# Check pod status
-kubectl get pods -l app=myapp
-
-# View pod logs
-kubectl logs <pod-name>
-
-# Describe pod for events
-kubectl describe pod <pod-name>
-
-# Check image pull
-kubectl get events | grep -i pull
-```
-
-### Issue: "Permission denied" on WSL
-
-**Solution:**
-```bash
-# Add user to docker group
 sudo usermod -aG docker $USER
-
-# Restart WSL
-wsl --shutdown
-wsl
-
-# Verify
-docker ps
 ```
-
-## Best Practices Implemented
-
-- ✅ **Agent Isolation** - Builds run on dedicated Linux agent, not controller
-- ✅ **Credentials Security** - No hardcoded secrets in Jenkinsfile
-- ✅ **Idempotent Deployments** - Helm upgrade creates or updates
-- ✅ **Tagging Strategy** - Images tagged with build numbers for traceability
-- ✅ **Health Checks** - Kubernetes liveness and readiness probes
-- ✅ **Resource Limits** - Prevents runaway containers
-- ✅ **Clean Workspace** - Pipeline cleans up after execution
-
-## Security Considerations
-
-- Jenkins credentials stored securely
-- Docker Hub access tokens instead of passwords
-- Kubernetes RBAC for access control
-- Container image scanning (can be added)
-- Secret management with Kubernetes Secrets
-- WSL agent isolated from Windows host
-
-## Performance Optimizations
-
-- Docker layer caching for faster builds
-- Multi-stage Dockerfiles to reduce image size
-- Kubernetes resource limits and requests
-- Horizontal Pod Autoscaler for traffic spikes
-- Helm chart values for environment-specific configs
-
-## Future Enhancements
-
-- [ ] Add automated testing stage (unit, integration)
-- [ ] Implement security scanning (Trivy, Snyk)
-- [ ] Separate CI and CD pipelines
-- [ ] Add staging environment deployment
-- [ ] Migrate Linux agent to AWS EC2
-- [ ] Implement blue-green deployment strategy
-- [ ] Add Slack/email notifications
-- [ ] Integrate Prometheus monitoring
-- [ ] Add SonarQube code quality checks
-- [ ] Implement GitOps with ArgoCD
-
-## Key Learnings
-
-This project demonstrates:
-
-- **Jenkins Architecture**: Understanding controller vs agent separation
-- **Linux vs Windows**: Why Linux agents are preferred for DevOps pipelines
-- **Container Workflows**: Complete Docker build, push, deploy cycle
-- **Kubernetes Operations**: Deployment, scaling, and management
-- **Helm Benefits**: Version control and rollback capabilities
-- **CI/CD Best Practices**: Automated, repeatable, reliable deployments
-- **Troubleshooting Skills**: Debugging pipeline, Docker, and Kubernetes issues
-
-## Testing the Pipeline
-
-### End-to-End Test
-
-1. **Make a code change:**
-```bash
-# Edit application code
-vim app/src/index.js
-
-# Commit and push
-git add .
-git commit -m "Update application"
-git push origin main
-```
-
-2. **Watch pipeline execute:**
-   - Jenkins automatically detects change
-   - Pipeline runs through all stages
-   - New Docker image is built and pushed
-   - Kubernetes deployment updates
-
-3. **Verify deployment:**
-```bash
-# Check new pods rolling out
-kubectl get pods -w
-
-# Verify new version
-kubectl describe pod <pod-name> | grep Image
-```
-
-## Commands Reference
-
-### Jenkins CLI
-
-```bash
-# Trigger build remotely
-curl -X POST http://localhost:8080/job/myapp-pipeline/build \
-  --user username:api-token
-
-# Get build status
-java -jar jenkins-cli.jar -s http://localhost:8080/ get-job myapp-pipeline
-```
-
-### Docker Commands
-
-```bash
-# Build image
-docker build -t myapp:latest .
-
-# Push to registry
-docker push yourusername/myapp:latest
-
-# Run locally
-docker run -p 8080:80 myapp:latest
-
-# Clean up unused images
-docker image prune -a
-```
-
-### Kubernetes Commands
-
-```bash
-# Apply manifests
-kubectl apply -f k8s/
-
-# Delete deployment
-kubectl delete deployment myapp
-
-# Get logs from all pods
-kubectl logs -l app=myapp --tail=100
-
-# Execute command in pod
-kubectl exec -it <pod-name> -- /bin/sh
-```
-
-## Resources
-
-- [Jenkins Documentation](https://www.jenkins.io/doc/)
-- [Docker Documentation](https://docs.docker.com/)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Helm Documentation](https://helm.sh/docs/)
-- [Jenkins Pipeline Syntax](https://www.jenkins.io/doc/book/pipeline/syntax/)
-
-## Project Status
-
-✅ **Pipeline Status**: Fully operational and green  
-✅ **Docker Build**: Successfully builds and pushes images  
-✅ **Kubernetes Deployment**: Helm deployments working perfectly  
-✅ **Automation**: Full CI/CD automation achieved  
-
-## Author
-
-**DevOps Portfolio Project**
-
-This project showcases hands-on experience with:
-- Jenkins CI/CD pipeline design and implementation
-- Docker containerization and registry management
-- Kubernetes orchestration and deployment
-- Helm package management
-- Linux system administration
-- DevOps automation and best practices
 
 ---
 
-## License
+# Project Comparison
 
-This project is open source and available for educational purposes.
-
-## Contributing
-
-Feel free to fork this project and submit pull requests with improvements!
+|                | Project 1 (this repo)  | Project 2      |
+| -------------- | ---------------------- | -------------- |
+| CI/CD          | Jenkins                | GitHub Actions |
+| Kubernetes     | Docker Desktop (local) | AWS EKS        |
+| Infrastructure | Local                  | Cloud          |
+| Registry       | Docker Hub             | AWS ECR        |
+| Deployment     | Helm                   | Terraform      |
 
 ---
 
-**⭐ If you find this project helpful, please give it a star
+# Author
+
+**Ivan Majic** — DevOps Portfolio Project
+
+Demonstrates Jenkins CI/CD pipelines, Docker containerization, Helm-based Kubernetes deployments, and local DevOps infrastructure setup with WSL2.
